@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:app_chat/api/message_api.dart';
+import 'package:app_chat/widgets/edittypingIndicator.dart';
 import 'package:flutter/material.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
@@ -20,7 +21,7 @@ class _ChatPageState extends State<SocketChatPage> {
   Timer? _typingTimer;
   bool isSomeoneTyping = false;
   String typingUser = "";
-
+  int typingDotsCount = 1;
   @override
   void initState() {
     super.initState();
@@ -63,6 +64,7 @@ class _ChatPageState extends State<SocketChatPage> {
       setState(() {
         isSomeoneTyping = true;
         typingUser = data['sender'];
+        _startTypingEffect();
       });
       debugPrint('user typing: ${data['sender']}');
     });
@@ -71,6 +73,7 @@ class _ChatPageState extends State<SocketChatPage> {
       setState(() {
         isSomeoneTyping = false;
         typingUser = "";
+        typingDotsCount = 1;
       });
     });
 
@@ -85,7 +88,17 @@ class _ChatPageState extends State<SocketChatPage> {
       debugPrint('message received: ${data["userID"]} ${data["message"]} from ${data["sender"]}');
     });
   }
-
+  void _startTypingEffect() {
+    Timer.periodic(Duration(milliseconds: 500), (timer) {
+      if (!isSomeoneTyping) {
+        timer.cancel();  
+      } else {
+        setState(() {
+          typingDotsCount = (typingDotsCount % 3) + 1;  
+        });
+      }
+    });
+  }
   void sendMessage() async {
     if (_controller.text.trim().isEmpty) return;
     socket.emit('send_message', {
@@ -160,7 +173,24 @@ class _ChatPageState extends State<SocketChatPage> {
               padding: const EdgeInsets.only(left: 8.0),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text('$typingUser is typing...'),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Row(
+                    children: [
+                      Text('$typingUser'),
+                      CurvedTypingIndicator(),
+                //       TypingIndicator(
+                //   dotSize: 15,
+                //   backgroundColor: const Color.fromARGB(0, 19, 18, 18),
+                //   borderRadius: BorderRadius.circular(20),
+                //   isGradient: true,
+                //   dotGradient: const LinearGradient(colors:
+                //     [Color.fromARGB(255, 227, 232, 236), Color.fromARGB(255, 95, 77, 185)],
+                //   ),
+                // ),
+                    ],
+                  ),
+                ),
               ),
             ),
           Padding(

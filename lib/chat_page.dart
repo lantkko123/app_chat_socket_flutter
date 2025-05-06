@@ -1,9 +1,12 @@
+import 'dart:async';
+import 'package:app_chat/api/message_api.dart';
 import 'package:flutter/material.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 class SocketChatPage extends StatefulWidget {
   final String roomId;
   final String Username;
+
   SocketChatPage({required this.roomId, required this.Username});
 
   @override
@@ -14,11 +17,31 @@ class _ChatPageState extends State<SocketChatPage> {
   late IO.Socket socket;
   List<Map<String, String>> messages = [];
   final TextEditingController _controller = TextEditingController();
+  Timer? _typingTimer;
+  bool isSomeoneTyping = false;
+  String typingUser = "";
 
   @override
   void initState() {
     super.initState();
     connectToServer();
+  }
+
+  void getallmessages() async {
+    try {
+      final response = await MessageService.getMessages(widget.roomId);
+      setState(() {
+        messages = response.map((msg) {
+          return {
+            "msg": msg.message,
+            "userID": msg.id,
+            "sender": msg.sender,
+          };
+        }).toList();
+      });
+    } catch (e) {
+      debugPrint('Error fetching messages: $e');
+    }
   }
 
   void connectToServer() {
@@ -32,17 +55,38 @@ class _ChatPageState extends State<SocketChatPage> {
       debugPrint('connected to server ${socket.id}');
       socket.emit('join_room', widget.roomId);
       debugPrint('joined room: ${widget.roomId}');
+      
+      getallmessages();
+    });
+
+    socket.on('user_typing', (data) {
+      setState(() {
+        isSomeoneTyping = true;
+        typingUser = data['sender'];
+      });
+      debugPrint('user typing: ${data['sender']}');
+    });
+
+    socket.on('user_stop_typing', (data) {
+      setState(() {
+        isSomeoneTyping = false;
+        typingUser = "";
+      });
     });
 
     socket.on('receive_message', (data) {
       setState(() {
-        messages.add({"msg": data["message"],"userID": data["userID"],"sender": data["sender"]});
+        messages.add({
+          "msg": data["message"],
+          "userID": data["userID"],
+          "sender": data["sender"]
+        });
       });
-      debugPrint('message received:${data["userID"]} ${data["message"]} from ${data["sender"]}');
+      debugPrint('message received: ${data["userID"]} ${data["message"]} from ${data["sender"]}');
     });
   }
 
-  void sendMessage() {
+  void sendMessage() async {
     if (_controller.text.trim().isEmpty) return;
     socket.emit('send_message', {
       'roomId': widget.roomId,
@@ -67,7 +111,6 @@ class _ChatPageState extends State<SocketChatPage> {
     
     return Container(
       padding: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-      // ignore: sort_child_properties_last
       child: Column(
         crossAxisAlignment: isUserid ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
@@ -105,27 +148,51 @@ class _ChatPageState extends State<SocketChatPage> {
       body: Column(
         children: [
           Expanded(
-              child: ListView.builder(
-                itemCount: messages.length,
-                itemBuilder: (context, index) {
-                  return _buildMessage(messages[index], messages[index]["userID"] == socket.id);
-                },
-              )),
+            child: ListView.builder(
+              itemCount: messages.length,
+              itemBuilder: (context, index) {
+                return _buildMessage(messages[index], messages[index]["userID"] == socket.id);
+              },
+            ),
+          ),
+          if (isSomeoneTyping)
+            Padding(
+              padding: const EdgeInsets.only(left: 8.0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('$typingUser is typing...'),
+              ),
+            ),
           Padding(
             padding: EdgeInsets.all(8),
             child: Row(
               children: [
                 Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      decoration: InputDecoration(hintText: 'Enter message'),
-                    )),
+                  child: TextField(
+                    onChanged: (_controller) {
+                      socket.emit('typing', {
+                        'roomId': widget.roomId,
+                        'sender': widget.Username,
+                      });
+                      _typingTimer?.cancel();
+                      _typingTimer = Timer(Duration(seconds: 2), () {
+                        socket.emit('stop_typing', {
+                          'roomId': widget.roomId,
+                          'sender': widget.Username,
+                        });
+                      });
+                    },
+                    controller: _controller,
+                    decoration: InputDecoration(hintText: 'Enter message'),
+                  ),
+                ),
                 IconButton(
-                    icon: Icon(Icons.send),
-                    onPressed: () => sendMessage())
+                  icon: Icon(Icons.send),
+                  onPressed: () => sendMessage(),
+                ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );

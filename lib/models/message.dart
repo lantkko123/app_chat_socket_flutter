@@ -1,26 +1,31 @@
 class Message {
   final String id;
   final String message;
-  final String receiverId;
+  final String sender;
   final DateTime sentAt;
+
   Message({
     required this.id,
     required this.message,
-    required this.receiverId,
+    required this.sender,
     required this.sentAt,
-    
   });
+
   Map<String, dynamic> toJson() {
     return {
-      'user_id': id,
+      'room_id': id,
+      'sender': sender,
       'message': message,
-      'receiverId': receiverId,
-      'sentAt': sentAt.toIso8601String(),
+      'timestamp': sentAt.toIso8601String(),
     };
   }
+
+  factory Message.fromJson(Map<String, dynamic> json) {
+    return Message(
+      id: json['room_id'] ?? '', 
+      message: json['message'] ?? '',
+      sender: json['sender'] ?? '',
+      sentAt: DateTime.parse(json['timestamp']),
+    );
+  }
 }
-  
-
-  
-
-  
